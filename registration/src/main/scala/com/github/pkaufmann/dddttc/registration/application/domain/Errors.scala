@@ -1,0 +1,25 @@
+package com.github.pkaufmann.dddttc.registration.application.domain
+
+sealed trait UserRegistrationError
+
+sealed trait VerificationError
+
+sealed trait PhoneNumberVerificationError extends VerificationError
+
+sealed trait CompleteVerificationError
+
+sealed trait CompleteError extends CompleteVerificationError
+
+case class PhoneNumberAlreadyVerifiedError(phoneNumber: PhoneNumber) extends PhoneNumberVerificationError
+
+case class PhoneNumberNotSwissError(phoneNumber: PhoneNumber) extends UserRegistrationError
+
+case class PhoneNumberNotYetVerifiedError(phoneNumber: PhoneNumber) extends CompleteError
+
+case class PhoneNumberVerificationCodeInvalidError(verificationCode: VerificationCode) extends PhoneNumberVerificationError
+
+case class UserHandleAlreadyInUseError(userHandle: UserHandle) extends UserRegistrationError
+
+case class UserRegistrationAlreadyCompletedError(userRegistrationId: UserRegistrationId) extends CompleteError
+
+case class UserRegistrationNotExistingError(userRegistrationId: UserRegistrationId) extends VerificationError with CompleteVerificationError
