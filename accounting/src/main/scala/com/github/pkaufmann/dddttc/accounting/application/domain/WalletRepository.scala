@@ -2,12 +2,12 @@ package com.github.pkaufmann.dddttc.accounting.application.domain
 
 import com.github.pkaufmann.dddttc.domain.Result
 
-trait WalletRepository[F[_]] {
-  def findAll(): F[List[Wallet]]
+object WalletRepository {
+  type FindAll[F[_]] = F[List[Wallet]]
 
-  def get(userId: UserId): Result[F, WalletNotExistingError, Wallet]
+  type Get[F[_]] = UserId => Result[F, WalletNotExistingError, Wallet]
 
-  def add(newWallet: Wallet): Result[F, WalletAlreadyExistsError, Unit]
+  type Add[F[_]] = Wallet => Result[F, WalletAlreadyExistsError, Unit]
 
-  def update(billedWallet: Wallet): Result[F, WalletNotExistingError, Unit]
+  type Update[F[_]] = Wallet => Result[F, WalletNotExistingError, Unit]
 }

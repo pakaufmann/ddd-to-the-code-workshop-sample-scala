@@ -1,6 +1,6 @@
 package com.github.pkaufmann.dddttc.rental.infrastructure.web
 
-import cats.effect.IO
+import cats.effect.Sync
 import com.github.pkaufmann.dddttc.infrastructure.web.UrlFormDecoder
 import com.github.pkaufmann.dddttc.rental.application.domain.bike.NumberPlate
 import com.github.pkaufmann.dddttc.rental.application.domain.booking.BookingId
@@ -21,6 +21,7 @@ object Decoders {
   implicit val userId = UrlFormDecoder.createDecoder[UserId](UserId.apply)
   implicit val bookingId = UrlFormDecoder.createDecoder[BookingId](BookingId.apply)
 
-  implicit val bookBikeDecoder = UrlFormDecoder[IO, BookBikeRequest]
-  implicit val completeBookingDecoder = UrlFormDecoder[IO, CompleteBookingRequest]
+  implicit def bookBikeDecoder[F[_] : Sync] = UrlFormDecoder[F, BookBikeRequest]
+
+  implicit def completeBookingDecoder[F[_] : Sync] = UrlFormDecoder[F, CompleteBookingRequest]
 }

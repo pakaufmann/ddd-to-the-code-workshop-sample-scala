@@ -1,34 +1,45 @@
 package com.github.pkaufmann.dddttc.registration.application
 
+import java.util.UUID
+
 import cats.Id
-import com.github.pkaufmann.dddttc.domain.events.Publisher
 import com.github.pkaufmann.dddttc.domain.implicits._
 import com.github.pkaufmann.dddttc.registration.TestRegistrations
-import com.github.pkaufmann.dddttc.registration.TestRegistrations._
-import com.github.pkaufmann.dddttc.registration.application.UserRegistrationService.RegistrationEvents
 import com.github.pkaufmann.dddttc.registration.application.domain._
 import com.github.pkaufmann.dddttc.testing.AggregateBuilder._
-import org.scalamock.scalatest.MockFactory
+import com.github.pkaufmann.dddttc.testing._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import shapeless.record._
 
-class UserRegistrationServiceTests extends AnyFlatSpec with Matchers with MockFactory {
-
-  val userRegistrationRepository = mock[UserRegistrationRepository[Id]]
-  val publisher = mock[Publisher[Id, RegistrationEvents]]
-
-  val service = new UserRegistrationService(userRegistrationRepository, publisher)
+class UserRegistrationServiceTests extends AnyFlatSpec with Matchers {
 
   "The user registration service" should "start a new registration process" in {
     val handle = UserHandle("peter")
 
-    (userRegistrationRepository.find _).expects(handle) returning None
-    (userRegistrationRepository.add _).expects(*) returning Right(()).asResult[UserHandleAlreadyInUseError, Id]
-    (publisher.publish _).expects(*) returning()
+    val start = UserRegistrationService.startNewUserRegistrationProcess[Id](
+      { case UserHandle("peter") => None },
+      always(Right(()).asResult[UserHandleAlreadyInUseError, Id]),
+      always(()),
+      always(111111),
+      UUID.fromString("02a4c319-f001-461e-8855-13092e973c97")
+    )
 
-    val result = service.startNewUserRegistrationProcess(handle, PhoneNumber("+41 79 123 45 67"))
-    result.value.isRight shouldBe true
+    start(handle, PhoneNumber("+41 79 123 45 67")).value shouldBe Right(UserRegistrationId("02a4c319-f001-461e-8855-13092e973c97"))
+  }
+
+  it should "return an error when the user handle already exists" in {
+    val handle = UserHandle("peter")
+
+    val start = UserRegistrationService.startNewUserRegistrationProcess[Id](
+      { case UserHandle("peter") => Some(TestRegistrations.default) },
+      always(Right(()).asResult[UserHandleAlreadyInUseError, Id]),
+      always(()),
+      always(111111),
+      UUID.randomUUID()
+    )
+
+    start(handle, PhoneNumber("+41 79 123 45 67")).value shouldBe Left(UserHandleAlreadyInUseError(handle))
   }
 
   it should "verify the phone number if an existing user registration and a valid verification code is provided" in {
@@ -36,10 +47,12 @@ class UserRegistrationServiceTests extends AnyFlatSpec with Matchers with MockFa
     val verificationCode = VerificationCode("123456")
     val userRegistration = TestRegistrations.default
 
-    (userRegistrationRepository.get _).expects(registrationId) returning Right(userRegistration).asResult[UserRegistrationNotExistingError, Id]
-    (userRegistrationRepository.update _).expects(*) returning Right(()).asResult[UserRegistrationNotExistingError, Id]
+    val verify = UserRegistrationService.verifyPhoneNumber[Id](
+      { case UserRegistrationId("user-registration-id-1") => Right(userRegistration).asResult[UserRegistrationNotExistingError, Id] },
+      always(Right(()).asResult[UserRegistrationNotExistingError, Id])
+    )
 
-    val result = service.verifyPhoneNumber(registrationId, verificationCode)
+    val result = verify(registrationId, verificationCode)
     result.value.isRight shouldBe true
   }
 
@@ -50,16 +63,12 @@ class UserRegistrationServiceTests extends AnyFlatSpec with Matchers with MockFa
       .replace(Symbol("phoneNumberVerified"), true)
       .back[UserRegistration]
 
-    val completedUserRegistration: UserRegistration = userRegistration.change
-      .replace(Symbol("completed"), true)
-      .replace(Symbol("fullName"), Option(fullName))
-      .back[UserRegistration]
+    val complete = UserRegistrationService.completeUserRegistration[Id](
+      { case UserRegistrationId("user-registration-id-1") => Right(userRegistration).asResult[UserRegistrationNotExistingError, Id] },
+      { case UserRegistration(_, _, _, _, Some(`fullName`), _, true) => Right(()).asResult[UserRegistrationNotExistingError, Id] },
+      always(())
+    )
 
-    (userRegistrationRepository.get _).expects(registrationId) returning Right(userRegistration).asResult[UserRegistrationNotExistingError, Id]
-    (userRegistrationRepository.update _).expects(whereEqv(completedUserRegistration)) returning Right(()).asResult[UserRegistrationNotExistingError, Id]
-    (publisher.publish _).expects(*) returning()
-
-    val result = service.completeUserRegistration(registrationId, fullName)
-    result.value.isRight shouldBe true
+    complete(registrationId, fullName).value.isRight shouldBe true
   }
 }

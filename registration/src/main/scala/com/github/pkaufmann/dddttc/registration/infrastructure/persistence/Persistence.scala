@@ -1,18 +1,17 @@
 package com.github.pkaufmann.dddttc.registration.infrastructure.persistence
 
-import cats.effect.{Blocker, ContextShift, IO, Resource}
-import com.github.pkaufmann.dddttc.infrastructure.persistence.implicits._
+import cats.effect.{Async, Blocker, ContextShift, Resource, Sync}
 import doobie._
 import doobie.hikari.HikariTransactor
 import org.flywaydb.core.Flyway
 
 object Persistence {
-  def initDb()(implicit context: ContextShift[IO]): Resource[IO, IOTransaction[ConnectionIO]] = {
+  def initDb[F[_] : Async]()(implicit context: ContextShift[F]): Resource[F, Transactor[F]] = {
     for {
-      ce <- ExecutionContexts.fixedThreadPool[IO](32)
-      be <- Blocker[IO]
+      ce <- ExecutionContexts.fixedThreadPool[F](32)
+      be <- Blocker[F]
       xa <- HikariTransactor
-        .newHikariTransactor[IO](
+        .newHikariTransactor[F](
           "org.h2.Driver",
           "jdbc:h2:mem:registration;DB_CLOSE_DELAY=-1",
           "sa",
@@ -20,15 +19,15 @@ object Persistence {
           ce,
           be
         )
-        .evalTap(_.configure(s => IO(s.setAutoCommit(false))))
-        .evalTap(runMigrations)
-    } yield JdbcTransaction(xa)
+        .evalTap(_.configure(s => Sync[F].delay(s.setAutoCommit(false))))
+        .evalTap(runMigrations[F])
+    } yield xa
   }
 
 
-  private def runMigrations(transactor: HikariTransactor[IO]): IO[Unit] = {
+  private def runMigrations[F[_] : Sync](transactor: HikariTransactor[F]): F[Unit] = {
     transactor.configure { dataSource =>
-      IO {
+      Sync[F].delay {
         Flyway.configure().dataSource(dataSource).load().migrate()
       }
     }

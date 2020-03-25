@@ -1,7 +1,6 @@
 package com.github.pkaufmann.dddttc.testing
 
 import cats.Eq
-import org.scalamock.function.FunctionAdapter1
 import org.scalatest.matchers.{MatchResult, Matcher}
 import shapeless.{Generic, HList, LabelledGeneric}
 
@@ -21,8 +20,6 @@ object AggregateBuilder {
   implicit class AsRepr[T](private val in: T) extends AnyVal {
     def change(implicit ev: LabelledGeneric[T]): ev.Repr = ev.to(in)
   }
-
-  def whereEqv[T](compareTo: T)(implicit eq: Eq[T]) = new FunctionAdapter1[T, Boolean](in => eq.eqv(in, compareTo))
 
   trait AggregateMatchers {
 

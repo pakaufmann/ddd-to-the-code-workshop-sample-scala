@@ -1,8 +1,9 @@
 @import com.github.pkaufmann.dddttc.registration.application.domain.UserHandle
 @import com.github.pkaufmann.dddttc.registration.application.domain.UserRegistrationId
 @import com.github.pkaufmann.dddttc.registration.infrastructure.web.Decoders.VerifyPhoneNumberRequest
+@import com.github.pkaufmann.dddttc.infrastructure.Trace
 
-@(userHandle: UserHandle, userRegistrationId: UserRegistrationId, error: Option[String] = None, existingRequest: Option[VerifyPhoneNumberRequest] = None)
+@(userHandle: UserHandle, userRegistrationId: UserRegistrationId, trace: Trace, error: Option[String] = None, existingRequest: Option[VerifyPhoneNumberRequest] = None)
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,6 +41,7 @@
         </div>
         <input type="hidden" name="userRegistrationId" value="@{userRegistrationId.value}" />
         <input type="hidden" name="userHandle" value="@{userHandle.value}" />
+        <input type="hidden" name="trace" value="@{trace.id}" />
         <button type="submit" class="btn btn-primary">Next &gt;</button>
     </form>
 </main>

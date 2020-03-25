@@ -4,34 +4,33 @@ import cats.Id
 import com.github.pkaufmann.dddttc.domain.implicits._
 import com.github.pkaufmann.dddttc.rental.application.domain.BikeNotExistingError
 import com.github.pkaufmann.dddttc.rental.application.domain.bike.{Bike, BikeRepository, NumberPlate}
-import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-class BikeServiceTests extends AnyFlatSpec with MockFactory with Matchers {
-  val bikeRepository = mock[BikeRepository[Id]]
-
-  val service = new BikeService(bikeRepository)
-
+class BikeServiceTests extends AnyFlatSpec with Matchers {
   "The bike service" should "return a single bike" in {
-    val bike = Bike(NumberPlate("1"))
+    val getBike = BikeService.getBike[Id](
+      { case p@NumberPlate("1") => Right(Bike(p)).asResult[BikeNotExistingError, Id] }
+    )
 
-    (bikeRepository.get _).expects(NumberPlate("1")) returning Right(bike).asResult[BikeNotExistingError, Id]
-    val response = service.getBike(NumberPlate("1")).value
-    response should equal(Right(bike))
+    val response = getBike(NumberPlate("1")).value
+
+    response should equal(Right(Bike(NumberPlate("1"))))
   }
 
   it should "return an error when no bike was found" in {
-    (bikeRepository.get _).expects(NumberPlate("1")) returning Left(BikeNotExistingError(NumberPlate("1"))).asResult[Bike, Id]
-    val response = service.getBike(NumberPlate("1")).value
-    response should equal(Left(BikeNotExistingError(NumberPlate("1"))))
+    val getBike = BikeService.getBike[Id](
+      { case p@NumberPlate("1") => Left(BikeNotExistingError(p)).asResult[Bike, Id] }
+    )
+
+    getBike(NumberPlate("1")).value should equal(Left(BikeNotExistingError(NumberPlate("1"))))
   }
 
   it should "list all bikes" in {
-    (bikeRepository.findAll _).expects() returning List(Bike(NumberPlate("1")), Bike(NumberPlate("2")))
+    val listBikes = BikeService.listBikes[Id](
+      List(Bike(NumberPlate("1")), Bike(NumberPlate("2")))
+    )
 
-    val response = service.listBikes()
-
-    response should equal(List(Bike(NumberPlate("1")), Bike(NumberPlate("2"))))
+    listBikes should equal(List(Bike(NumberPlate("1")), Bike(NumberPlate("2"))))
   }
 }

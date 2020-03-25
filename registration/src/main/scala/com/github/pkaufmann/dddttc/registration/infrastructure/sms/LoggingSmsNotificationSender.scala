@@ -1,10 +1,13 @@
 package com.github.pkaufmann.dddttc.registration.infrastructure.sms
 
+import cats.data.ReaderT
 import cats.effect.Sync
-import com.github.pkaufmann.dddttc.registration.application.domain.{PhoneNumber, SmsNotificationSender}
+import com.github.pkaufmann.dddttc.infrastructure.Trace
+import com.github.pkaufmann.dddttc.registration.application.domain.SmsNotificationSender.SendSMS
 
-class LoggingSmsNotificationSender[F[_]: Sync]() extends SmsNotificationSender[F] {
-  override def sendSmsTo(phoneNumber: PhoneNumber, smsText: String): F[Unit] = {
-    Sync[F].delay(println(s"Send sms to $phoneNumber with text: $smsText"))
-  }
+object LoggingSmsNotificationSender {
+  def sendSmsTo[F[_] : Sync]: SendSMS[ReaderT[F, Trace, *]] =
+    (phoneNumber, smsText) => ReaderT { trace =>
+      Sync[F].delay(println(s"Send sms to $phoneNumber with text: $smsText, and trace: $trace"))
+    }
 }

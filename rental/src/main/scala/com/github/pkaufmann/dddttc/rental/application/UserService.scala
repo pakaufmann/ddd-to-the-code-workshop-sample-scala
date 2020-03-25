@@ -6,8 +6,8 @@ import com.github.pkaufmann.dddttc.rental.application.domain.user.{User, UserId,
 import com.github.pkaufmann.dddttc.stereotypes.ApplicationService
 
 @ApplicationService
-class UserService[F[_]](userRepository: UserRepository[F]) {
-  def addUser(id: UserId): Result[F, UserAlreadyExistsError, Unit] = {
-    userRepository.add(User(id))
-  }
+object UserService {
+  type AddUser[F[_]] = UserId => Result[F, UserAlreadyExistsError, Unit]
+
+  def addUser[F[_]](addUser: UserRepository.Add[F]): AddUser[F] = addUser.compose(User.apply)
 }

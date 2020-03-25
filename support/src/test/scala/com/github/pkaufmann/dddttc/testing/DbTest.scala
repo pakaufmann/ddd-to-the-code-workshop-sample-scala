@@ -1,6 +1,6 @@
 package com.github.pkaufmann.dddttc.testing
 
-import cats.effect._
+import cats.effect.{Blocker, Clock, ContextShift, IO, Resource, Timer}
 import com.github.pkaufmann.dddttc.domain.Result
 import doobie.h2.H2Transactor
 import doobie.implicits._
@@ -12,6 +12,7 @@ import scala.concurrent.ExecutionContext
 trait DbTest {
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
+  implicit val conIOClock = Clock.create[ConnectionIO]
 
   private val transactor: Resource[IO, Transactor[IO]] = for {
     ce <- ExecutionContexts.fixedThreadPool[IO](32) // our connect EC

@@ -1,13 +1,12 @@
 package com.github.pkaufmann.dddttc.accounting.infrastructure
 
-import java.time.{Clock, Instant, ZoneOffset}
-
 import cats.implicits._
 import com.github.pkaufmann.dddttc.accounting.application.WalletService
 import com.github.pkaufmann.dddttc.accounting.application.domain._
 import com.github.pkaufmann.dddttc.accounting.infrastructure.event.implicits._
 import com.github.pkaufmann.dddttc.accounting.infrastructure.persistence.JdbcWalletRepository
 import com.github.pkaufmann.dddttc.infrastructure.event.{PendingEventStore, TransactionalEventPublisher}
+import com.github.pkaufmann.dddttc.infrastructure.implicits._
 import com.github.pkaufmann.dddttc.testing.AggregateBuilder._
 import com.github.pkaufmann.dddttc.testing.DbTest
 import doobie.implicits._
@@ -17,21 +16,16 @@ import shapeless.record._
 import TestWallets._
 
 class WalletScenarioTest extends AnyFlatSpec with Matchers with AggregateMatchers with DbTest {
-  val clock = Clock.fixed(Instant.ofEpochSecond(1000), ZoneOffset.UTC)
-
-  private val walletRepository = new JdbcWalletRepository()
-
-  val walletService = new WalletService(
-    new BookingFeePolicy(),
-    walletRepository,
-    TransactionalEventPublisher(clock, new PendingEventStore())
-  )
-
   "The wallet service" should "create a new wallet" in {
+    val initializeWallet = WalletService.initializeWallet(
+      JdbcWalletRepository.add,
+      TransactionalEventPublisher.single(PendingEventStore.store)
+    )
+
     val wallet = run {
       for {
-        _ <- walletService.initializeWallet(UserId("1"))
-        w <- walletRepository.get(UserId("1")).leftWiden[Any]
+        _ <- initializeWallet(UserId("1"))
+        w <- JdbcWalletRepository.get(UserId("1")).leftWiden[Any]
       } yield w
     }
 
@@ -42,10 +36,15 @@ class WalletScenarioTest extends AnyFlatSpec with Matchers with AggregateMatcher
   }
 
   it should "return an error when a wallet already exists" in {
+    val initializeWallet = WalletService.initializeWallet(
+      JdbcWalletRepository.add,
+      TransactionalEventPublisher.single(PendingEventStore.store)
+    )
+
     val result = run {
       for {
-        _ <- walletRepository.add(TestWallets.default)
-        r <- walletService.initializeWallet(UserId("1"))
+        _ <- JdbcWalletRepository.add(TestWallets.default)
+        r <- initializeWallet(UserId("1"))
       } yield r
     }
 
@@ -58,10 +57,12 @@ class WalletScenarioTest extends AnyFlatSpec with Matchers with AggregateMatcher
       TestWallets.change.replace(Symbol("id"), UserId("2")).back[Wallet]
     )
 
+    val listWallets = WalletService.listWallets(JdbcWalletRepository.findAll)
+
     val foundWallets = run {
       for {
-        _ <- wallets.traverse(walletRepository.add).value
-        found <- walletService.listWallets()
+        _ <- wallets.traverse(JdbcWalletRepository.add).value
+        found <- listWallets
       } yield found
     }
 

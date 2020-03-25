@@ -1,65 +1,102 @@
 package com.github.pkaufmann.dddttc.rental.infrastructure.web
 
-import cats.effect.IO
-import com.github.pkaufmann.dddttc.infrastructure.persistence.implicits._
+import cats.effect.Sync
 import com.github.pkaufmann.dddttc.rental.application.domain._
 import com.github.pkaufmann.dddttc.rental.application.{BikeService, BookingService}
 import com.github.pkaufmann.dddttc.rental.infrastructure.web.Decoders._
 import org.http4s.dsl.io._
-import org.http4s.headers.Location
+import org.http4s.headers.{Location, `Content-Length`}
 import org.http4s.twirl._
+import cats.implicits._
 import org.http4s.{HttpRoutes, _}
 
 object RentalController {
-  def routes[F[_]: IOTransaction](bookService: BookingService[F], bikeService: BikeService[F]): HttpRoutes[IO] = {
-    HttpRoutes.of[IO] {
+  def listBikes[F[_] : Sync](listBikes: BikeService.ListBikes[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
       case GET -> Root / "bikes" =>
-        bikeService.listBikes()
-          .transact
-          .flatMap(bikes => Ok(rental.html.index(bikes)))
+        listBikes
+          .map(bikes => Response(status = Status.Ok).withEntity(rental.html.index(bikes)))
+    }
+
+  def getBike[F[_] : Sync](getBike: BikeService.GetBike[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
       case GET -> Root / "bookings" / "new" :? NumberPlateParameter(numberPlate) =>
-        bikeService.getBike(numberPlate)
-          .transact
-          .foldF(
+        getBike(numberPlate)
+          .fold(
             {
               case BikeNotExistingError(id) =>
-                NotFound(rental.html.error(s"Bike with id ${id.value} does not exist"))
+                Response(status = Status.NotFound)
+                  .withEntity(rental.html.error(s"Bike with id ${id.value} does not exist"))
             },
-            bike => Ok(rental.html.book(bike))
+            bike =>
+              Response(status = Status.Ok)
+                .withEntity(rental.html.book(bike))
           )
+    }
+
+  def bookBike[F[_] : Sync](bookBike: BookingService.BookBike[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
       case req@POST -> Root / "bookings" =>
         req.decode[BookBikeRequest] { data =>
-          bookService.bookBike(data.numberPlate, data.userId)
-            .transact
-            .foldF(
+          bookBike(data.numberPlate, data.userId)
+            .fold(
               {
                 case BikeNotExistingError(id) =>
-                  NotFound(rental.html.error(s"Bike with id ${id.value} does not exist"))
+                  Response(status = Status.NotFound)
+                    .withEntity(rental.html.error(s"Bike with id ${id.value} does not exist"))
                 case BikeAlreadyBookedError(bike) =>
-                  PreconditionFailed(rental.html.error(s"The bike with id ${bike.numberPlate.value} is already booked"))
+                  Response(status = Status.PreconditionFailed)
+                    .withEntity(rental.html.error(s"The bike with id ${bike.numberPlate.value} is already booked"))
                 case UserNotExistingError(userId) =>
-                  NotFound(rental.html.error(s"User '${userId.value} does not exist'"))
+                  Response(status = Status.NotFound)
+                    .withEntity(rental.html.error(s"User '${userId.value} does not exist'"))
               },
-              booking => Found(Location(Uri.unsafeFromString(s"/rental/bookings?bookingId=${booking.id.value}")))
+              booking =>
+                Response(
+                  status = Status.Found,
+                  headers = Headers(
+                    List(
+                      `Content-Length`.zero,
+                      Location(Uri.unsafeFromString(s"/rental/bookings?bookingId=${booking.id.value}"))
+                    )
+                  )
+                )
             )
         }
+    }
+
+  def completeBooking[F[_] : Sync](completeBooking: BookingService.CompleteBooking[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
       case req@PUT -> Root / "bookings" =>
         req.decode[CompleteBookingRequest] { data =>
-          bookService.completeBooking(data.bookingId)
-            .transact
-            .foldF({
+          completeBooking(data.bookingId)
+            .fold({
               case BookingAlreadyCompletedError(bookingId) =>
-                PreconditionFailed(rental.html.error(s"The booking '${bookingId.value}' was already completed"))
+                Response(status = Status.PreconditionFailed)
+                  .withEntity(rental.html.error(s"The booking '${bookingId.value}' was already completed"))
               case BookingNotExistingError(bookingId) =>
-                PreconditionFailed(rental.html.error(s"Could not find booking for id '${bookingId.value}'"))
+                Response(status = Status.PreconditionFailed)
+                  .withEntity(rental.html.error(s"Could not find booking for id '${bookingId.value}'"))
             },
-              _ => Found(Location(Uri.unsafeFromString("/rental/bookings")))
+              _ =>
+                Response(
+                  status = Status.Found,
+                  headers = Headers(
+                    List(
+                      `Content-Length`.zero,
+                      Location(Uri.unsafeFromString("/rental/bookings"))
+                    )
+                  )
+                )
             )
         }
+    }
+
+  def listBookings[F[_] : Sync](listBookings: BookingService.ListBookings[F]): HttpRoutes[F] = {
+    HttpRoutes.of[F] {
       case GET -> Root / "bookings" =>
-        bookService.listBookings()
-          .transact
-          .flatMap(bookings => Ok(rental.html.bookings(bookings)))
+        listBookings
+          .map(bookings => Response(status = Status.Ok).withEntity(rental.html.bookings(bookings)))
     }
   }
 

@@ -14,7 +14,7 @@ package object event {
       decode[UserRegistrationCompletedMessage](_).toTry
     )
 
-    implicit val bookingCompletedEvent = MqPubSub[BookingCompletedEvent](
+    implicit val bookingCompletedEvent = MqPubSub.create[BookingCompletedEvent](
       Topic("rental/booking-completed"),
       _.asJson.noSpaces,
       decode[BookingCompletedEvent](_).toTry

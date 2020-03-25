@@ -1,25 +1,27 @@
 package com.github.pkaufmann.dddttc.registration.infrastructure.web
 
-import cats.effect.IO
+import cats.effect.Sync
+import com.github.pkaufmann.dddttc.infrastructure.Trace
 import com.github.pkaufmann.dddttc.infrastructure.web.UrlFormDecoder
 import com.github.pkaufmann.dddttc.registration.application.domain._
 
 object Decoders {
 
-  case class NewUserRegistrationRequest(userHandle: UserHandle, phoneNumber: PhoneNumber)
+  case class NewUserRegistrationRequest(userHandle: UserHandle, phoneNumber: PhoneNumber, trace: Option[Trace])
 
-  case class VerifyPhoneNumberRequest(userRegistrationId: UserRegistrationId, verificationCode: VerificationCode, userHandle: UserHandle)
+  case class VerifyPhoneNumberRequest(userRegistrationId: UserRegistrationId, verificationCode: VerificationCode, userHandle: UserHandle, trace: Trace)
 
-  case class CompleteRegistrationRequest(userRegistrationId: UserRegistrationId, firstName: String, lastName: String, userHandle: UserHandle)
+  case class CompleteRegistrationRequest(userRegistrationId: UserRegistrationId, firstName: String, lastName: String, userHandle: UserHandle, trace: Trace)
 
   implicit val userHandle = UrlFormDecoder.createDecoder[UserHandle](UserHandle.apply)
   implicit val phone = UrlFormDecoder.createDecoder[PhoneNumber](PhoneNumber.apply)
   implicit val userRegistrationId = UrlFormDecoder.createDecoder[UserRegistrationId](UserRegistrationId.apply)
   implicit val verificationCode = UrlFormDecoder.createDecoder[VerificationCode](VerificationCode.apply)
+  implicit val traceDecoder = UrlFormDecoder.createDecoder[Trace](Trace.apply)
 
-  implicit val newUserRegistrationDecoder = UrlFormDecoder[IO, NewUserRegistrationRequest]
+  implicit def newUserRegistrationDecoder[F[_] : Sync] = UrlFormDecoder[F, NewUserRegistrationRequest]
 
-  implicit val verifyPhoneNumberDecoder = UrlFormDecoder[IO, VerifyPhoneNumberRequest]
+  implicit def verifyPhoneNumberDecoder[F[_] : Sync] = UrlFormDecoder[F, VerifyPhoneNumberRequest]
 
-  implicit val completeRegistrationDecoder = UrlFormDecoder[IO, CompleteRegistrationRequest]
+  implicit def completeRegistrationDecoder[F[_] : Sync] = UrlFormDecoder[F, CompleteRegistrationRequest]
 }

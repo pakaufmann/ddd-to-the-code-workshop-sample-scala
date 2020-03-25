@@ -1,41 +1,58 @@
 package com.github.pkaufmann.dddttc.registration.infrastructure.web
 
-import cats.Monad
-import cats.effect.IO
-import com.github.pkaufmann.dddttc.infrastructure.persistence.implicits._
+import cats.data.ReaderT
+import cats.effect.Sync
+import cats.implicits._
+import com.github.pkaufmann.dddttc.infrastructure.Trace
+import com.github.pkaufmann.dddttc.infrastructure.implicits._
 import com.github.pkaufmann.dddttc.registration.application.UserRegistrationService
 import com.github.pkaufmann.dddttc.registration.application.domain._
 import com.github.pkaufmann.dddttc.registration.infrastructure.web.Decoders._
-import org.http4s.HttpRoutes
 import org.http4s.dsl.io._
 import org.http4s.twirl._
+import org.http4s.{HttpRoutes, Response, Status}
 
 object UserRegistrationController {
-  def routes[F[_]: IOTransaction : Monad](userRegistrationService: UserRegistrationService[F]): HttpRoutes[IO] = {
-    HttpRoutes.of[IO] {
+  def root[F[_] : Sync]: HttpRoutes[F] = {
+    HttpRoutes.of[F] {
       case GET -> Root =>
-        Ok(registration.html.start(None, None))
-      case req@POST -> Root / "start" =>
+        Response[F](status = Status.Ok)
+          .withEntity(registration.html.start(None, None))
+          .pure[F]
+    }
+  }
+
+  def start[F[_] : Sync](start: UserRegistrationService.StartNewUserRegistrationProcess[ReaderT[F, Trace, *]]): HttpRoutes[F] = {
+    HttpRoutes.of[F] {
+      case req@POST -> Root / "start" => {
         req.decode[NewUserRegistrationRequest] { data =>
-          userRegistrationService
-            .startNewUserRegistrationProcess(data.userHandle, data.phoneNumber)
-            .transact
-            .foldF(
+          val trace = data.trace.getOrElse(Trace())
+          start(data.userHandle, data.phoneNumber)
+            .run(trace)
+            .fold(
               {
                 case PhoneNumberNotSwissError(phoneNumber) =>
-                  Ok(registration.html.start(Some(s"Phone number '${phoneNumber.value}' was not swiss"), Some(data)))
+                  Response(status = Status.BadRequest)
+                    .withEntity(registration.html.start(Some(s"Phone number '${phoneNumber.value}' was not swiss"), Some(data), Some(trace)))
                 case UserHandleAlreadyInUseError(userHandle) =>
-                  Ok(registration.html.start(Some(s"User handle '${userHandle.value}' is already used"), Some(data)))
+                  Response(status = Status.BadRequest)
+                    .withEntity(registration.html.start(Some(s"User handle '${userHandle.value}' is already used"), Some(data), Some(trace)))
               },
-              userRegistrationId => Ok(registration.html.verify(data.userHandle, userRegistrationId))
+              userRegistrationId =>
+                Response(status = Status.Ok)
+                  .withEntity(registration.html.verify(data.userHandle, userRegistrationId, trace))
             )
         }
+      }
+    }
+  }
+
+  def verify[F[_] : Sync](verify: UserRegistrationService.VerifyPhoneNumber[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
       case req@POST -> Root / "verify" =>
         req.decode[VerifyPhoneNumberRequest] { data =>
-          userRegistrationService
-            .verifyPhoneNumber(data.userRegistrationId, data.verificationCode)
-            .transact
-            .foldF(
+          verify(data.userRegistrationId, data.verificationCode)
+            .fold(
               error => {
                 val errorMessage = error match {
                   case PhoneNumberAlreadyVerifiedError(phoneNumber) =>
@@ -45,17 +62,22 @@ object UserRegistrationController {
                   case UserRegistrationNotExistingError(userRegistrationId) =>
                     s"User for registration id '${userRegistrationId.value}' does not exist"
                 }
-                Ok(registration.html.verify(data.userHandle, data.userRegistrationId, Some(errorMessage), Some(data)))
+                Response(status = Status.Ok)
+                  .withEntity(registration.html.verify(data.userHandle, data.userRegistrationId, data.trace, Some(errorMessage), Some(data)))
               },
-              _ => Ok(registration.html.complete(data.userHandle, data.userRegistrationId))
+              _ => Response(status = Status.Ok)
+                .withEntity(registration.html.complete(data.userHandle, data.userRegistrationId, data.trace))
             )
         }
+    }
+
+  def complete[F[_] : Sync](complete: UserRegistrationService.CompleteUserRegistration[ReaderT[F, Trace, *]]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
       case req@POST -> Root / "complete" =>
         req.decode[CompleteRegistrationRequest] { data =>
-          userRegistrationService
-            .completeUserRegistration(data.userRegistrationId, FullName(data.firstName, data.lastName))
-            .transact
-            .foldF(
+          complete(data.userRegistrationId, FullName(data.firstName, data.lastName))
+            .run(data.trace)
+            .fold(
               error => {
                 val errorMessage = error match {
                   case PhoneNumberNotYetVerifiedError(phoneNumber) =>
@@ -66,12 +88,12 @@ object UserRegistrationController {
                     s"User registration with id '${userRegistrationId.value}' does not exist"
                 }
 
-                Ok(registration.html.complete(data.userHandle, data.userRegistrationId, Some(errorMessage), Some(data)))
+                Response(status = Status.Ok)
+                  .withEntity(registration.html.complete(data.userHandle, data.userRegistrationId, data.trace, Some(errorMessage), Some(data)))
               },
-              _ => Ok(registration.html.done(data.userHandle, FullName(data.firstName, data.lastName)))
+              _ => Response(status = Status.Ok)
+                .withEntity(registration.html.done(data.userHandle, FullName(data.firstName, data.lastName), data.trace))
             )
         }
     }
-  }
-
 }

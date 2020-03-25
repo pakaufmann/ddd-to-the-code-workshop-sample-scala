@@ -1,6 +1,7 @@
 package com.github.pkaufmann.dddttc.rental.infrastructure.event
 
 import cats.Functor
+import com.github.pkaufmann.dddttc.domain.Subscription
 import com.github.pkaufmann.dddttc.rental.application.UserService
 import com.github.pkaufmann.dddttc.rental.application.domain.UserAlreadyExistsError
 import com.github.pkaufmann.dddttc.rental.application.domain.user.UserId
@@ -11,17 +12,17 @@ import org.log4s._
 object UserRegistrationCompletedMessageListener {
   private val logger = getLogger
 
-  def apply[F[_] : Functor](userService: UserService[F]): UserRegistrationCompletedMessage => F[Unit] = (message: UserRegistrationCompletedMessage) => {
-    userService
-      .addUser(UserId(message.userHandle))
-      .fold(
-        {
-          case UserAlreadyExistsError(userId) =>
-            logger.info(s"User already exists. Probably a duplicated message for user: $userId")
-        },
-        _ => ()
-      )
-  }
+  def apply[F[_] : Functor](addUser: UserService.AddUser[F]): Subscription[F, UserRegistrationCompletedMessage] =
+    message => {
+      addUser(UserId(message.userHandle))
+        .fold(
+          {
+            case UserAlreadyExistsError(userId) =>
+              logger.info(s"User already exists. Probably a duplicated message for user: $userId")
+          },
+          _ => ()
+        )
+    }
 
   object Message {
 

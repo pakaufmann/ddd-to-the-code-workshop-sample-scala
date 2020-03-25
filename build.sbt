@@ -18,6 +18,7 @@ val options = Seq(
 )
 
 lazy val support = (project in file("support")).settings(
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
   scalaVersion := globalScalaVersion,
   libraryDependencies ++= Seq(
     "org.typelevel" %% "cats-core" % "2.0.0",
@@ -33,7 +34,7 @@ lazy val support = (project in file("support")).settings(
     "org.flywaydb" % "flyway-core" % "6.2.1",
     "io.circe" %% "circe-core" % circeVersion,
     "org.scalatest" %% "scalatest" % "3.1.0" % Test,
-    "org.scalamock" %% "scalamock" % "4.4.0" % Test
+    "org.jsoup" % "jsoup" % "1.13.1" % Test
   ),
   scalacOptions ++= options
 )
@@ -58,7 +59,7 @@ val deps = {
     "org.apache.activemq" % "activemq-all" % "5.15.11",
     "com.github.pureconfig" %% "pureconfig" % "0.12.3",
     "org.scalatest" %% "scalatest" % "3.1.0" % Test,
-    "org.scalamock" %% "scalamock" % "4.4.0" % Test
+    "org.jsoup" % "jsoup" % "1.13.1" % Test
   )
 }
 
@@ -66,6 +67,7 @@ lazy val registration = (project in file("registration"))
   .enablePlugins(SbtTwirl)
   .dependsOn(support % "compile->compile;test->test")
   .settings(
+    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     scalaVersion := globalScalaVersion,
     sourceDirectories in(Compile, TwirlKeys.compileTemplates) := Seq(sourceDirectory.value / "main" / "twirl"),
     libraryDependencies ++= deps,
@@ -76,6 +78,7 @@ lazy val accounting = (project in file("accounting"))
   .enablePlugins(SbtTwirl)
   .dependsOn(support % "compile->compile;test->test")
   .settings(
+    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     scalaVersion := globalScalaVersion,
     sourceDirectories in(Compile, TwirlKeys.compileTemplates) := Seq(sourceDirectory.value / "main" / "twirl"),
     libraryDependencies ++= deps,
@@ -86,6 +89,7 @@ lazy val rental = (project in file("rental"))
   .enablePlugins(SbtTwirl)
   .dependsOn(support % "compile->compile;test->test")
   .settings(
+    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     scalaVersion := globalScalaVersion,
     sourceDirectories in(Compile, TwirlKeys.compileTemplates) := Seq(sourceDirectory.value / "main" / "twirl"),
     libraryDependencies ++= deps,

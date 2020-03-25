@@ -11,7 +11,7 @@ import shapeless.{::, CNil, HList, HNil, LabelledGeneric, Lazy, Witness}
 package object web {
 
   implicit class FiberJoiner[A](val fibers: NonEmptyList[Fiber[IO, A]]) extends AnyVal {
-    def joinAll(implicit cs: ContextShift[IO]): IO[A]  = {
+    def joinAll(implicit cs: ContextShift[IO]): IO[A] = {
       fibers
         .map(_.join)
         .reduceLeft(IO.race(_, _).map(_.merge))
@@ -24,6 +24,17 @@ package object web {
   }
 
   object UrlFormDecoder extends urlFormDecoders0 {
+    implicit def optionDecoder[T](implicit d: UrlFormDecoder[T]): UrlFormDecoder[Option[T]] = decoder {
+      case s: UrlForm if s.values.size == 1 =>
+        val blank = s.values.head._2.headOption.forall(_.isBlank)
+        if(!blank) {
+          d.decode(s).map(Some.apply)
+        } else {
+          Valid(None)
+        }
+      case _ => Valid(None)
+    }
+
     implicit val stringDecoder: UrlFormDecoder[String] = decoder {
       case s: UrlForm if s.values.size == 1 => s.values.head._2.headOption.map(Valid.apply)
         .getOrElse(Invalid(NonEmptyList.one(s"String not found $s")))

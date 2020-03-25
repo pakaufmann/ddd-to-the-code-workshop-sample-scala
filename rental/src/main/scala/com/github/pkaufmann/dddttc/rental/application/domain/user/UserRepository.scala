@@ -5,8 +5,8 @@ import com.github.pkaufmann.dddttc.rental.application.domain.{UserAlreadyExistsE
 import org.springframework.stereotype.Repository
 
 @Repository
-trait UserRepository[F[_]] {
-  def add(user: User): Result[F, UserAlreadyExistsError, Unit]
+object UserRepository {
+  type Add[F[_]] = User => Result[F, UserAlreadyExistsError, Unit]
 
-  def get(userId: UserId): Result[F, UserNotExistingError, User]
+  type Get[F[_]] = UserId => Result[F, UserNotExistingError, User]
 }

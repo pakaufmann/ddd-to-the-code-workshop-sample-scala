@@ -5,12 +5,12 @@ import com.github.pkaufmann.dddttc.rental.application.domain.BikeNotExistingErro
 import org.springframework.stereotype.Repository
 
 @Repository
-trait BikeRepository[F[_]] {
-  def add(bike: Bike): F[Unit]
+object BikeRepository {
+  type Add[F[_]] = Bike => F[Unit]
 
-  def update(bike: Bike): F[Unit]
+  type Update[F[_]] = Bike => F[Unit]
 
-  def get(numberPlate: NumberPlate): Result[F, BikeNotExistingError, Bike]
+  type Get[F[_]] = NumberPlate => Result[F, BikeNotExistingError, Bike]
 
-  def findAll(): F[List[Bike]]
+  type FindAll[F[_]] = F[List[Bike]]
 }

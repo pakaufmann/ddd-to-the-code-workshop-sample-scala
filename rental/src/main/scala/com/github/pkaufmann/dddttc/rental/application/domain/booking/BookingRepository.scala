@@ -5,12 +5,12 @@ import com.github.pkaufmann.dddttc.rental.application.domain.BookingNotExistingE
 import org.springframework.stereotype.Repository
 
 @Repository
-trait BookingRepository[F[_]] {
-  def findAll(): F[List[Booking]]
+object BookingRepository {
+  type FindAll[F[_]] = F[List[Booking]]
 
-  def add(booking: Booking): F[Unit]
+  type Add[F[_]] = Booking => F[Unit]
 
-  def update(booking: Booking): F[Unit]
+  type Update[F[_]] = Booking => F[Unit]
 
-  def get(bookingId: BookingId): Result[F, BookingNotExistingError, Booking]
+  type Get[F[_]] = BookingId => Result[F, BookingNotExistingError, Booking]
 }

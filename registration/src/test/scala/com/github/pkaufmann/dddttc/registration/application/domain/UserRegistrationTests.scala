@@ -1,30 +1,33 @@
 package com.github.pkaufmann.dddttc.registration.application.domain
 
+import java.util.UUID
+
 import cats.Id
+import cats.implicits._
 import com.github.pkaufmann.dddttc.registration.TestRegistrations
 import com.github.pkaufmann.dddttc.registration.TestRegistrations._
 import com.github.pkaufmann.dddttc.testing.AggregateBuilder.{AggregateMatchers, _}
-import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import shapeless.record._
+import com.github.pkaufmann.dddttc.testing._
 
-class UserRegistrationTests extends AnyFlatSpec with Matchers with AggregateMatchers with MockFactory {
-  val userRegistrationRepository = mock[UserRegistrationRepository[Id]]
-
-  val userRegistrationFactory = UserRegistration(userRegistrationRepository)(_, _)
-
+class UserRegistrationTests extends AnyFlatSpec with Matchers with AggregateMatchers {
   "The user registration" should "create a new registration for a valid user handle and phone number" in {
     val handle = UserHandle("peter")
     val number = PhoneNumber("+41 79 123 45 67")
 
-    (userRegistrationRepository.find _).expects(handle) returning None
+    val userRegistrationFactory = UserRegistration[Id](
+      always(None),
+      always(111111),
+      UUID.fromString("02a4c319-f001-461e-8855-13092e973c97")
+    )
 
     val (registration, event) = userRegistrationFactory(handle, number).value.getOrElse(fail())
 
     val expectedRegistration: UserRegistration = TestRegistrations.default.change
-      .replace(Symbol("id"), registration.id)
-      .replace(Symbol("verificationCode"), registration.verificationCode)
+      .replace(Symbol("id"), UserRegistrationId("02a4c319-f001-461e-8855-13092e973c97"))
+      .replace(Symbol("verificationCode"), VerificationCode("111111"))
       .back[UserRegistration]
 
     registration should eqv(expectedRegistration)(fullEq)
@@ -35,7 +38,11 @@ class UserRegistrationTests extends AnyFlatSpec with Matchers with AggregateMatc
     val handle = UserHandle("peter")
     val number = PhoneNumber("+41 79 123 45 67")
 
-    (userRegistrationRepository.find _).expects(handle) returning Some(TestRegistrations.default)
+    val userRegistrationFactory = UserRegistration[Id](
+      always(Some(TestRegistrations.default)),
+      always(111111),
+      UUID.fromString("02a4c319-f001-461e-8855-13092e973c97")
+    )
 
     val result = userRegistrationFactory(handle, number)
 

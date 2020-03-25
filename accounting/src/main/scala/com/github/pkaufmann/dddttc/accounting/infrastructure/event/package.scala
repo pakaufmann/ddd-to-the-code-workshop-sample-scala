@@ -9,8 +9,9 @@ import io.circe.parser.decode
 import io.circe.syntax._
 
 package object event {
+
   object implicits {
-    implicit val walletInitializedPublication = MqPublication[WalletInitializedEvent](
+    implicit val walletInitializedPublication = MqPublication.create[WalletInitializedEvent](
       Topic("accounting/wallet-initialized"),
       _.asJson.noSpaces
     )
@@ -25,4 +26,5 @@ package object event {
       decode[UserRegistrationCompletedMessage](_).toTry
     )
   }
+
 }

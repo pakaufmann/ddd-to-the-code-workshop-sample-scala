@@ -2,13 +2,12 @@ package com.github.pkaufmann.dddttc.registration.application.domain
 
 import com.github.pkaufmann.dddttc.domain.Result
 
-trait UserRegistrationRepository[F[_]] {
+object UserRegistrationRepository {
+  type Add[F[_]] = UserRegistration => Result[F, UserHandleAlreadyInUseError, Unit]
 
-  def add(userRegistration: UserRegistration): Result[F, UserHandleAlreadyInUseError, Unit]
+  type Update[F[_]] = UserRegistration => Result[F, UserRegistrationNotExistingError, Unit]
 
-  def update(verifiedRegistration: UserRegistration): Result[F, UserRegistrationNotExistingError, Unit]
+  type Find[F[_]] = UserHandle => F[Option[UserRegistration]]
 
-  def find(userHandle: UserHandle): F[Option[UserRegistration]]
-
-  def get(userRegistrationId: UserRegistrationId): Result[F, UserRegistrationNotExistingError, UserRegistration]
+  type Get[F[_]] = UserRegistrationId => Result[F, UserRegistrationNotExistingError, UserRegistration]
 }

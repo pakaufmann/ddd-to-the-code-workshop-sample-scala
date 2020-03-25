@@ -11,16 +11,14 @@ import org.scalatest.matchers.should.Matchers
 import shapeless.record._
 
 class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with AggregateMatchers with DbTest {
-  val repository = new JdbcUserRegistrationRepository()
-
   "The repository" should "store a user registration in the database" in {
     val completedRegistration: UserRegistration = TestRegistrations.completed
 
     val (count, found) = run {
       for {
-        _ <- repository.add(completedRegistration).value
+        _ <- JdbcUserRegistrationRepository.add(completedRegistration).value
         count <- sql"""SELECT COUNT(*) FROM user_registration""".query[Long].unique
-        found <- repository.get(completedRegistration.id).value
+        found <- JdbcUserRegistrationRepository.get(completedRegistration.id).value
       } yield (count, found)
     }
 
@@ -36,8 +34,8 @@ class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with
 
     val error = run {
       for {
-        _ <- repository.add(existing).value
-        result <- repository.add(duplicatedHandle).value
+        _ <- JdbcUserRegistrationRepository.add(existing).value
+        result <- JdbcUserRegistrationRepository.add(duplicatedHandle).value
       } yield result
     }
 
@@ -53,10 +51,10 @@ class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with
 
     val (count, result) = run {
       for {
-        _ <- repository.add(existing).value
-        _ <- repository.update(updated).value
+        _ <- JdbcUserRegistrationRepository.add(existing).value
+        _ <- JdbcUserRegistrationRepository.update(updated).value
         count <- sql"""SELECT COUNT(*) FROM user_registration""".query[Long].unique
-        r <- repository.get(existing.id).value
+        r <- JdbcUserRegistrationRepository.get(existing.id).value
       } yield (count, r)
     }
 
@@ -67,7 +65,7 @@ class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with
   it should "return an error if a non-existing user registration is updated" in {
     val nonExisting = TestRegistrations.default
 
-    val error = run(repository.update(nonExisting).value)
+    val error = run(JdbcUserRegistrationRepository.update(nonExisting).value)
 
     error shouldBe Left(UserRegistrationNotExistingError(nonExisting.id))
   }
@@ -75,7 +73,7 @@ class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with
   it should "return an error if a non-existing user registration is searched" in {
     val nonExisting = UserRegistrationId("non-existing")
 
-    val error = run(repository.get(nonExisting))
+    val error = run(JdbcUserRegistrationRepository.get(nonExisting))
 
     error shouldBe Left(UserRegistrationNotExistingError(nonExisting))
   }
@@ -85,8 +83,8 @@ class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with
 
     val result  = run {
       for {
-        _ <- repository.add(registration).value
-        r <- repository.find(registration.userHandle)
+        _ <- JdbcUserRegistrationRepository.add(registration).value
+        r <- JdbcUserRegistrationRepository.find(registration.userHandle)
       } yield r
     }
 
@@ -97,7 +95,7 @@ class JdbcUserRegistrationRepositoryTests extends AnyFlatSpec with Matchers with
   it should "return nothing when no registration for a handle exists" in {
     val nonExisting = UserHandle("non-existing")
 
-    val notFound = run(repository.find(nonExisting))
+    val notFound = run(JdbcUserRegistrationRepository.find(nonExisting))
 
     notFound should not be defined
   }

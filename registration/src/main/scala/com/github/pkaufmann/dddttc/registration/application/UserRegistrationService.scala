@@ -1,48 +1,66 @@
 package com.github.pkaufmann.dddttc.registration.application
 
-import cats.Monad
 import cats.implicits._
-import com.github.pkaufmann.dddttc.domain.Result
-import com.github.pkaufmann.dddttc.domain.events.Publisher
+import cats.{Applicative, Monad}
 import com.github.pkaufmann.dddttc.domain.implicits._
-import com.github.pkaufmann.dddttc.registration.application.UserRegistrationService.RegistrationEvents
+import com.github.pkaufmann.dddttc.domain.{Publisher, Result, UUIDGenerator}
+import com.github.pkaufmann.dddttc.registration.application.domain.VerificationCode.RandomNumber
 import com.github.pkaufmann.dddttc.registration.application.domain._
 import com.github.pkaufmann.dddttc.stereotypes.ApplicationService
-import shapeless._
+import org.apache.camel.spi.UuidGenerator
 
 @ApplicationService
-class UserRegistrationService[F[_] : Monad](userRegistrationRepository: UserRegistrationRepository[F], publisher: Publisher[F, RegistrationEvents]) {
-
-  val userRegistrationFactory = UserRegistration(userRegistrationRepository)(_, _)
-
-  def startNewUserRegistrationProcess(userHandle: UserHandle, phoneNumber: PhoneNumber): Result[F, UserRegistrationError, UserRegistrationId] = {
-    for {
-      userRegistration <- userRegistrationFactory(userHandle, phoneNumber)
-      (registration, event) = userRegistration
-      _ <- publisher.publish(Coproduct(event)).asResult[UserRegistrationError]
-      _ <- userRegistrationRepository.add(registration).leftWiden[UserRegistrationError]
-    } yield registration.id
-  }
-
-  def verifyPhoneNumber(userRegistrationId: UserRegistrationId, verificationCode: VerificationCode): Result[F, VerificationError, Unit] = {
-    for {
-      userRegistration <- userRegistrationRepository.get(userRegistrationId)
-      verifiedRegistration <- userRegistration.verifyPhoneNumber(verificationCode).asResult[F]
-      _ <- userRegistrationRepository.update(verifiedRegistration).leftWiden[VerificationError]
-    } yield ()
-  }
-
-  def completeUserRegistration(userRegistrationId: UserRegistrationId, fullName: FullName): Result[F, CompleteVerificationError, Unit] = {
-    for {
-      userRegistration <- userRegistrationRepository.get(userRegistrationId)
-      completed <- userRegistration.complete(fullName).asResult[F]
-      (completedRegistration, event) = completed
-      _ <- publisher.publish(Coproduct[RegistrationEvents](event)).asResult[CompleteVerificationError]
-      _ <- userRegistrationRepository.update(completedRegistration).leftWiden[CompleteVerificationError]
-    } yield ()
-  }
-}
-
 object UserRegistrationService {
-  type RegistrationEvents = PhoneNumberVerificationCodeGeneratedEvent :+: UserRegistrationCompletedEvent :+: CNil
+  type StartNewUserRegistrationProcess[F[_]] = (UserHandle, PhoneNumber) => Result[F, UserRegistrationError, UserRegistrationId]
+
+  type VerifyPhoneNumber[F[_]] = (UserRegistrationId, VerificationCode) => Result[F, VerificationError, Unit]
+
+  type CompleteUserRegistration[F[_]] = (UserRegistrationId, FullName) => Result[F, CompleteVerificationError, Unit]
+
+  def startNewUserRegistrationProcess[F[_] : Monad]
+  (
+    findUser: UserRegistrationRepository.Find[F], addUser: UserRegistrationRepository.Add[F],
+    publisher: Publisher[F, PhoneNumberVerificationCodeGeneratedEvent],
+    randomIntGenerator: RandomNumber[F],
+    uuidGenerator: UUIDGenerator[F]
+  ): StartNewUserRegistrationProcess[F] = {
+    val userRegistrationFactory = UserRegistration(findUser, randomIntGenerator, uuidGenerator)
+
+    (userHandle, phoneNumber) => {
+      for {
+        userRegistration <- userRegistrationFactory(userHandle, phoneNumber)
+        (registration, event) = userRegistration
+        _ <- publisher(event).asResult[UserRegistrationError]
+        _ <- addUser(registration).leftWiden[UserRegistrationError]
+      } yield registration.id
+    }
+  }
+
+  def verifyPhoneNumber[F[_] : Monad]
+  (
+    getUser: UserRegistrationRepository.Get[F], updateUser: UserRegistrationRepository.Update[F]
+  ): VerifyPhoneNumber[F] = {
+    (userRegistrationId, verificationCode) => {
+      for {
+        userRegistration <- getUser(userRegistrationId)
+        verifiedRegistration <- userRegistration.verifyPhoneNumber(verificationCode).asResult[F]
+        _ <- updateUser(verifiedRegistration).leftWiden[VerificationError]
+      } yield ()
+    }
+  }
+
+  def completeUserRegistration[F[_] : Monad]
+  (
+    getUser: UserRegistrationRepository.Get[F], updateUser: UserRegistrationRepository.Update[F],
+    publisher: Publisher[F, UserRegistrationCompletedEvent]
+  ): CompleteUserRegistration[F] = {
+    (userRegistrationId, fullName) => {
+      for {
+        userRegistration <- getUser(userRegistrationId)
+        completed <- userRegistration.complete(fullName).asResult[F]
+        (update, publish) = completed.bimap(updateUser, publisher)
+        _ <- update.leftWiden[CompleteVerificationError] *> publish.asResult
+      } yield ()
+    }
+  }
 }

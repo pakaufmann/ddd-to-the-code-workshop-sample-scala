@@ -8,13 +8,13 @@ import io.circe.syntax._
 
 package object event {
   object implicits {
-    implicit val phoneNumberVerificationCodeGeneratedEvent = MqPubSub[PhoneNumberVerificationCodeGeneratedEvent](
+    implicit val phoneNumberVerificationCodeGeneratedEvent = MqPubSub.create[PhoneNumberVerificationCodeGeneratedEvent](
       Topic("registration/phone-number-verification-code-generated"),
       _.asJson.noSpaces,
       decode[PhoneNumberVerificationCodeGeneratedEvent](_).toTry
     )
 
-    implicit val userRegistrationCompletedEvent = MqPublication[UserRegistrationCompletedEvent](
+    implicit val userRegistrationCompletedEvent = MqPublication.create[UserRegistrationCompletedEvent](
       Topic("registration/user-registration-completed"),
       _.asJson.noSpaces
     )

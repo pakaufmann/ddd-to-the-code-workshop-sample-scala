@@ -2,8 +2,9 @@ package com.github.pkaufmann.dddttc.registration.application.domain
 
 import cats.Monad
 import cats.implicits._
-import com.github.pkaufmann.dddttc.domain.Result
 import com.github.pkaufmann.dddttc.domain.implicits._
+import com.github.pkaufmann.dddttc.domain.{Result, UUIDGenerator}
+import com.github.pkaufmann.dddttc.registration.application.domain.VerificationCode.RandomNumber
 import com.github.pkaufmann.dddttc.stereotypes.{Aggregate, AggregateFactory, AggregateId}
 
 @Aggregate
@@ -37,27 +38,46 @@ case class UserRegistration private(@AggregateId id: UserRegistrationId, userHan
 }
 
 private[application] object UserRegistration {
+  type UserRegistrationFactory[F[_]] = (UserHandle, PhoneNumber) => Result[F, UserRegistrationError, (UserRegistration, PhoneNumberVerificationCodeGeneratedEvent)]
+
   @AggregateFactory
-  def apply[F[_] : Monad](userRegistrationRepository: UserRegistrationRepository[F])(userHandle: UserHandle, phoneNumber: PhoneNumber)(): Result[F, UserRegistrationError, (UserRegistration, PhoneNumberVerificationCodeGeneratedEvent)] = {
-    for {
-      existing <- userRegistrationRepository.find(userHandle).asResult[UserRegistrationError]
-      newUser = existing match {
-        case Some(_) => Left(UserHandleAlreadyInUseError(userHandle))
-        case None => newRegistration(userHandle, phoneNumber)
-      }
-      result <- newUser.leftWiden[UserRegistrationError].asResult[F]
-    } yield result
+  def apply[F[_] : Monad]
+  (
+    findUser: UserRegistrationRepository.Find[F],
+    numberGenerator: RandomNumber[F],
+    uuidGenerator: UUIDGenerator[F]
+  ): UserRegistrationFactory[F] = {
+    val registrationFactory = newRegistration(numberGenerator, uuidGenerator)
+
+    (userHandle, phoneNumber) => {
+      for {
+        existing <- findUser(userHandle).asResult
+        newUser <- existing.fold(
+          registrationFactory(userHandle, phoneNumber).leftWiden[UserRegistrationError]
+        )(
+          _ => UserHandleAlreadyInUseError(userHandle).asErrorResult
+        )
+      } yield newUser
+    }
   }
 
-  private def newRegistration(userHandle: UserHandle, phoneNumber: PhoneNumber): Either[PhoneNumberNotSwissError, (UserRegistration, PhoneNumberVerificationCodeGeneratedEvent)] = {
-    if (!phoneNumber.isSwiss) {
-      return Left(PhoneNumberNotSwissError(phoneNumber))
-    }
-    val verificationCode = VerificationCode.random()
+  private type NewRegistrationFactory[F[_]] = (UserHandle, PhoneNumber) => Result[F, PhoneNumberNotSwissError, (UserRegistration, PhoneNumberVerificationCodeGeneratedEvent)]
 
-    Right((
-      UserRegistration(UserRegistrationId.newId(), userHandle, phoneNumber, verificationCode, None, phoneNumberVerified = false, completed = false),
-      PhoneNumberVerificationCodeGeneratedEvent(phoneNumber, verificationCode)
-    ))
+  private def newRegistration[F[_] : Monad](random: RandomNumber[F], uuidGenerator: UUIDGenerator[F]): NewRegistrationFactory[F] = {
+    (userHandle, phoneNumber) => {
+      if (!phoneNumber.isSwiss) {
+        PhoneNumberNotSwissError(phoneNumber).asErrorResult
+      } else {
+
+        (UserRegistrationId.newId(uuidGenerator), VerificationCode.random(random))
+          .mapN { (id, code) =>
+            (
+              UserRegistration(id, userHandle, phoneNumber, code, None, phoneNumberVerified = false, completed = false),
+              PhoneNumberVerificationCodeGeneratedEvent(phoneNumber, code)
+            )
+          }
+          .asResult
+      }
+    }
   }
 }
