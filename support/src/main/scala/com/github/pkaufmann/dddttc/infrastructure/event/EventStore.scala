@@ -19,7 +19,7 @@ object PendingEventStore {
 
   val getUnsent: GetUnsent[ConnectionIO] = {
     count => {
-      sql"SELECT id, topic, payload, published_at, trace FROM domain_event ORDER BY published_at ASC LIMIT $count"
+      sql"SELECT TOP ($count) id, topic, payload, published_at, trace FROM domain_event ORDER BY published_at ASC"
         .query[PendingDomainEvent]
         .stream
         .compile

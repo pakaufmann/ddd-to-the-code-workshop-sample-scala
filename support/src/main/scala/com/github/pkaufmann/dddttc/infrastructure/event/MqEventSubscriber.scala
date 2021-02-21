@@ -2,10 +2,11 @@ package com.github.pkaufmann.dddttc.infrastructure.event
 
 import cats.data.ReaderT
 import cats.effect.implicits._
-import cats.effect.{ExitCode, Resource, Sync}
+import cats.effect.{Blocker, ContextShift, ExitCode, Resource, Sync}
 import cats.implicits._
 import com.github.pkaufmann.dddttc.domain.Subscription
 import com.github.pkaufmann.dddttc.infrastructure.Trace
+
 import javax.jms.{ConnectionFactory, Session, TextMessage}
 import org.log4s._
 
@@ -34,35 +35,40 @@ object MqEventSubscriber {
 
   private val logger = getLogger
 
-  def bindTrace[F[_] : Sync, T: MqSubscription](connFactory: ConnectionFactory, handle: Subscription[ReaderT[F, Trace, *], T]): F[ExitCode] = {
+  def bindTrace[F[_] : Sync, T: MqSubscription](connFactory: ConnectionFactory, handle: Subscription[ReaderT[F, Trace, *], T])(implicit cs: ContextShift[F]): F[ExitCode] = {
     bindMessage[F, T](connFactory) {
       (m, t) => handle.andThen(_.run(Trace(t.getJMSCorrelationID))).apply(m)
     }
   }
 
-  def bind[F[_] : Sync, T: MqSubscription](connFactory: ConnectionFactory, handle: Subscription[F, T]): F[ExitCode] = {
+  def bind[F[_] : Sync, T: MqSubscription](connFactory: ConnectionFactory, handle: Subscription[F, T])(implicit cs: ContextShift[F]): F[ExitCode] = {
     bindMessage[F, T](connFactory) {
       (m, _) => handle(m)
     }
   }
 
-  private def bindMessage[F[_] : Sync, T](connFactory: ConnectionFactory)(handle: MessageSubscription[F, T])(implicit subscription: MqSubscription[T]): F[ExitCode] = {
+  private def bindMessage[F[_] : Sync, T](connFactory: ConnectionFactory)(handle: MessageSubscription[F, T])(implicit subscription: MqSubscription[T], cs: ContextShift[F]): F[ExitCode] = {
     fs2.Stream.resource(createConsumer[F, T](connFactory))
-      .evalMap {
-        _.receive match {
-          case message: TextMessage =>
-            subscription.asObject(message.getText)
-              .fold(
-                Sync[F].raiseError[Unit],
-                event => for {
-                  _ <- Sync[F].delay[Unit](logger.info(s"Received event: $event with trace: ${message.getJMSCorrelationID}"))
-                  r <- handle(event, message).map(_ => ())
-                } yield r
-              )
-              .onError(e => Sync[F].delay(logger.error(e)("An error occurred while trying to consume the events")))
-              .guarantee(Sync[F].delay(message.acknowledge()))
-          case _ =>
-            Sync[F].unit
+      .evalMap { in =>
+        Blocker[F].use { blocker =>
+          for {
+            message <- blocker.delay(in.receive())
+            _ <- message match {
+              case message: TextMessage =>
+                subscription.asObject(message.getText)
+                  .fold(
+                    Sync[F].raiseError[Unit],
+                    event => for {
+                      _ <- Sync[F].delay[Unit](logger.info(s"Received event: $event with trace: ${message.getJMSCorrelationID}"))
+                      r <- handle(event, message).map(_ => ())
+                    } yield r
+                  )
+                  .onError(e => Sync[F].delay(logger.error(e)("An error occurred while trying to consume the events")))
+                  .guarantee(Sync[F].delay(message.acknowledge()))
+              case _ =>
+                Sync[F].unit
+            }
+          } yield ()
         }
       }
       .repeat

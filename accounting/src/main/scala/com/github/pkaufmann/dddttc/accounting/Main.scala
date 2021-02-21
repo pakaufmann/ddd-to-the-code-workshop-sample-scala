@@ -1,9 +1,8 @@
 package com.github.pkaufmann.dddttc.accounting
 
 import java.util.concurrent.Executors
-
 import cats.data.{NonEmptyList, ReaderT}
-import cats.effect.{Clock, ExitCode, IO, IOApp}
+import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp}
 import cats.implicits._
 import com.github.pkaufmann.dddttc.accounting.application.WalletService
 import com.github.pkaufmann.dddttc.accounting.infrastructure.event.BookingCompletedMessageListener.Message.BookingCompletedMessage
@@ -22,16 +21,26 @@ import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 import doobie.implicits._
 
+import javax.jms.ConnectionFactory
+import javax.naming.{Context, InitialContext}
 import scala.concurrent.ExecutionContext
 
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
-    Persistence.initDb[IO]().use { implicit xa =>
+    val config = if (args.contains("local")) {
+      ConfigSource.resources("application-local.conf").loadOrThrow[ApplicationConfig]
+    } else {
+      ConfigSource.resources("application.conf").loadOrThrow[ApplicationConfig]
+    }
+
+    Persistence.initDb[IO](config.driver, config.url, config.user, config.password).use { implicit xa =>
       implicit val conIOClock = Clock.create[ConnectionIO]
 
-      val config = ConfigSource.default.loadOrThrow[ApplicationConfig]
-
-      val connFactory = new ActiveMQConnectionFactory(config.brokerUrl)
+      val connFactory = if (config.brokerType == "local") {
+        new ActiveMQConnectionFactory(config.brokerUrl)
+      } else {
+        AzureConnectionFactory(config.brokerUrl, config.brokerPassword)
+      }
 
       val publish = MqEventPublisher.publish(
         PendingEventStore.getUnsent, PendingEventStore.removeSent
@@ -54,7 +63,6 @@ object Main extends IOApp {
       )
 
       val publisherContext = IO.contextShift(ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1)))
-      val subscriberContext = IO.contextShift(ExecutionContext.fromExecutor(Executors.newCachedThreadPool()))
 
       val bookingCompletedListener = BookingCompletedMessageListener(billBookingFee).andThen(_.transact(xa))
       val userRegistrationListener = UserRegistrationCompletedMessageListener(initializeWallet).andThen(_.mapF(_.transact(xa)))
@@ -64,7 +72,7 @@ object Main extends IOApp {
         subscriptions <- List(
           MqEventSubscriber.bind[IO, BookingCompletedMessage](connFactory, bookingCompletedListener),
           MqEventSubscriber.bindTrace[IO, UserRegistrationCompletedMessage](connFactory, userRegistrationListener)
-        ).traverse(_.start(subscriberContext))
+        ).traverse(_.start)
         server <- Server
           .create[IO](
             config.port,

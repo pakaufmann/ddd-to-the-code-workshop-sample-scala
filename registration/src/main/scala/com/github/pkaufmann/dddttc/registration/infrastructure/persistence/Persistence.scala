@@ -6,16 +6,16 @@ import doobie.hikari.HikariTransactor
 import org.flywaydb.core.Flyway
 
 object Persistence {
-  def initDb[F[_] : Async]()(implicit context: ContextShift[F]): Resource[F, Transactor[F]] = {
+  def initDb[F[_] : Async](driverClass: String, url: String, user: String, password: String)(implicit context: ContextShift[F]): Resource[F, Transactor[F]] = {
     for {
-      ce <- ExecutionContexts.fixedThreadPool[F](32)
-      be <- Blocker[F]
+      ce <- ExecutionContexts.fixedThreadPool[F](32) // our connect EC
+      be <- Blocker[F] // our blocking EC
       xa <- HikariTransactor
         .newHikariTransactor[F](
-          "org.h2.Driver",
-          "jdbc:h2:mem:registration;DB_CLOSE_DELAY=-1",
-          "sa",
-          "",
+          driverClass,
+          url,
+          user,
+          password,
           ce,
           be
         )

@@ -19,7 +19,7 @@ object Server {
     val blocker = Blocker.liftExecutorService(blockingPool)
 
     BlazeServerBuilder[F]
-      .bindHttp(port, "localhost")
+      .bindHttp(port, "0.0.0.0")
       .withHttpApp(HttpMethodOverrider(
         Router(mappings :+ "/static" -> resourceService[F](ResourceService.Config("/static", blocker)): _*).orNotFound,
         HttpMethodOverriderConfig(FormOverrideStrategy("_method", FunctionK.id[F]), Set(Method.POST))

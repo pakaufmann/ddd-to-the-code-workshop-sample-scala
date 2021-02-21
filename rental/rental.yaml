@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rental
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rental
+  template:
+    metadata:
+      labels:
+        app: rental
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+        - name: rental
+          image: rentalregistry.azurecr.io/rental:0.1.0-SNAPSHOT
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8083
+            - containerPort: 61083
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rental
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8083
+      name: http
+    - port: 61083
+      targetPort: 61083
+      name: rabbit
+  selector:
+    app: rental

@@ -14,7 +14,7 @@ val options = Seq(
   "-language:higherKinds",
   "-explaintypes",
   "-Ymacro-annotations",
-  "Xlog-implicits"
+  "-Xlog-implicits"
 )
 
 lazy val support = (project in file("support")).settings(
@@ -59,41 +59,53 @@ val deps = {
     "org.apache.activemq" % "activemq-all" % "5.15.11",
     "com.github.pureconfig" %% "pureconfig" % "0.12.3",
     "org.scalatest" %% "scalatest" % "3.1.0" % Test,
-    "org.jsoup" % "jsoup" % "1.13.1" % Test
+    "org.jsoup" % "jsoup" % "1.13.1" % Test,
+    "com.azure" % "azure-messaging-servicebus" % "7.0.0",
+    "org.apache.qpid" % "qpid-jms-client" % "0.11.1",
+    "com.microsoft.sqlserver" % "mssql-jdbc" % "8.4.0.jre11"
   )
 }
 
 lazy val registration = (project in file("registration"))
-  .enablePlugins(SbtTwirl)
+  .enablePlugins(SbtTwirl, JavaAppPackaging, DockerPlugin)
   .dependsOn(support % "compile->compile;test->test")
   .settings(
     addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     scalaVersion := globalScalaVersion,
     sourceDirectories in(Compile, TwirlKeys.compileTemplates) := Seq(sourceDirectory.value / "main" / "twirl"),
     libraryDependencies ++= deps,
-    scalacOptions ++= options
+    scalacOptions ++= options,
+    dockerExposedPorts ++= Seq(8081, 61081),
+    dockerExecCommand := Seq("/usr/bin/podman"),
+    dockerBaseImage := "openjdk:11"
   )
 
 lazy val accounting = (project in file("accounting"))
-  .enablePlugins(SbtTwirl)
+  .enablePlugins(SbtTwirl, JavaAppPackaging, DockerPlugin)
   .dependsOn(support % "compile->compile;test->test")
   .settings(
     addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     scalaVersion := globalScalaVersion,
     sourceDirectories in(Compile, TwirlKeys.compileTemplates) := Seq(sourceDirectory.value / "main" / "twirl"),
     libraryDependencies ++= deps,
-    scalacOptions ++= options
+    scalacOptions ++= options,
+    dockerExposedPorts ++= Seq(8082, 61082),
+    dockerExecCommand := Seq("/usr/bin/podman"),
+    dockerBaseImage := "openjdk:11"
   )
 
 lazy val rental = (project in file("rental"))
-  .enablePlugins(SbtTwirl)
+  .enablePlugins(SbtTwirl, JavaAppPackaging, DockerPlugin)
   .dependsOn(support % "compile->compile;test->test")
   .settings(
     addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     scalaVersion := globalScalaVersion,
     sourceDirectories in(Compile, TwirlKeys.compileTemplates) := Seq(sourceDirectory.value / "main" / "twirl"),
     libraryDependencies ++= deps,
-    scalacOptions ++= options
+    scalacOptions ++= options,
+    dockerExposedPorts ++= Seq(8083, 61083),
+    dockerExecCommand := Seq("/usr/bin/podman"),
+    dockerBaseImage := "openjdk:11"
   )
 
 lazy val root = (project in file("."))

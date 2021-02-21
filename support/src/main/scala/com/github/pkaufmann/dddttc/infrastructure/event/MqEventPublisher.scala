@@ -33,7 +33,7 @@ object MqEventPublisher {
     Resource.make(producer)(s => sync.delay(s.close()).handleErrorWith(_ => sync.unit)).use { p =>
       sync.delay {
         val message = session.createTextMessage()
-        message.setStringProperty("domain-event-id", event.id)
+        message.setStringProperty("domain_event_id", event.id)
         message.setText(event.payload)
         message.setJMSCorrelationID(event.trace.id)
         p.send(message)

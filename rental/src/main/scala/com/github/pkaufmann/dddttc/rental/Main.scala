@@ -1,7 +1,8 @@
 package com.github.pkaufmann.dddttc.rental
 
 import cats.data.NonEmptyList
-import cats.effect.{Clock, ExitCode, IO, IOApp, Sync}
+import cats.effect.internals.{IOContextShift, PoolUtils}
+import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp, Sync}
 import cats.implicits._
 import com.github.pkaufmann.dddttc.infrastructure.event._
 import com.github.pkaufmann.dddttc.infrastructure.implicits._
@@ -21,16 +22,36 @@ import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 import doobie.implicits._
 
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{Executors, ThreadFactory}
+import javax.jms.ConnectionFactory
+import javax.naming.InitialContext
+import javax.naming.Context
+import scala.concurrent.ExecutionContext
+
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
-    Persistence.initDb[IO]().use { implicit xa =>
-      implicit val conIOClock = Clock.create[ConnectionIO]
+    val config = if (args.contains("local")) {
+      ConfigSource.resources("application-local.conf").loadOrThrow[ApplicationConfig]
+    } else {
+      ConfigSource.resources("application.conf").loadOrThrow[ApplicationConfig]
+    }
 
-      val config = ConfigSource.default.loadOrThrow[ApplicationConfig]
+    Persistence.initDb[IO](
+      config.driver,
+      config.url,
+      config.user,
+      config.password
+    ).use { implicit xa =>
+      implicit val conIOClock = Clock.create[ConnectionIO]
 
       def instant[F[_]](implicit S: Sync[F]) = S.delay(java.time.Clock.systemUTC().instant())
 
-      val connFactory = new ActiveMQConnectionFactory(config.brokerUrl)
+      val connFactory = if (config.brokerType == "local") {
+        new ActiveMQConnectionFactory(config.brokerUrl)
+      } else {
+        AzureConnectionFactory(config.brokerUrl, config.brokerPassword)
+      }
 
       val publish = MqEventPublisher.publish(
         PendingEventStore.getUnsent, PendingEventStore.removeSent
@@ -67,10 +88,14 @@ object Main extends IOApp {
       )
 
       val userRegistrationCompletedHandler = UserRegistrationCompletedMessageListener(addUser)
+        .andThen(_.transact(xa))
+
+      val publisherContext = IO.contextShift(ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1)))
+      val subscriberContext = IO.contextShift(ExecutionContext.fromExecutor(Executors.newCachedThreadPool()))
 
       for {
         _ <- Persistence.initializeDb(addBike)
-        publications <- publishLoop.start
+        publications <- publishLoop.start(publisherContext)
         subscriptions <- List(
           MqEventSubscriber.bind[IO, BookingCompletedEvent](
             connFactory,
@@ -78,9 +103,9 @@ object Main extends IOApp {
           ),
           MqEventSubscriber.bind[IO, UserRegistrationCompletedMessage](
             connFactory,
-            userRegistrationCompletedHandler.andThen(_.transact(xa))
+            userRegistrationCompletedHandler
           )
-        ).traverse(_.start)
+        ).traverse(_.start(subscriberContext))
         server <- Server
           .create[IO](
             config.port,

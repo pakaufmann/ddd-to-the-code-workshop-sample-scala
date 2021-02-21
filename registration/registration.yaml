@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: registration
+  template:
+    metadata:
+      labels:
+        app: registration
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+        - name: registration
+          image: rentalregistry.azurecr.io/registration:0.1.0-SNAPSHOT
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8081
+            - containerPort: 61081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registration
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8081
+      name: http
+    - port: 61081
+      targetPort: 61081
+      name: rabbit
+  selector:
+    app: registration

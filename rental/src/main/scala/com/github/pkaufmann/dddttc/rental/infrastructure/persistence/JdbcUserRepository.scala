@@ -9,7 +9,7 @@ import doobie.implicits._
 object JdbcUserRepository {
   val add: UserRepository.Add[ConnectionIO] = {
     user => {
-      sql"INSERT INTO user(id, data) VALUES(${user.id}, $user)"
+      sql"INSERT INTO rental_user(id, data) VALUES(${user.id}, $user)"
         .update
         .run
         .attemptSomeSqlState {
@@ -23,7 +23,7 @@ object JdbcUserRepository {
 
   val get: UserRepository.Get[ConnectionIO] = {
     userId => {
-      sql"SELECT data FROM user WHERE id = $userId"
+      sql"SELECT data FROM rental_user WHERE id = $userId"
         .query[User]
         .option
         .map(_.toRight(UserNotExistingError(userId)))

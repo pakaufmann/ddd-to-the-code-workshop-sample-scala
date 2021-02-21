@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accounting
+  template:
+    metadata:
+      labels:
+        app: accounting
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+        - name: accounting
+          image: rentalregistry.azurecr.io/accounting:0.1.0-SNAPSHOT
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8082
+            - containerPort: 61082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounting
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8082
+      name: http
+    - port: 61082
+      targetPort: 61082
+      name: rabbit
+  selector:
+    app: accounting

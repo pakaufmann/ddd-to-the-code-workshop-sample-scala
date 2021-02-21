@@ -20,16 +20,26 @@ import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 import doobie.implicits._
 
+import javax.jms.ConnectionFactory
+import javax.naming.{Context, InitialContext}
 import scala.concurrent.duration._
 
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
-    Persistence.initDb[IO]().use { implicit xa =>
+    val config = if (args.contains("local")) {
+      ConfigSource.resources("application-local.conf").loadOrThrow[ApplicationConfig]
+    } else {
+      ConfigSource.resources("application.conf").loadOrThrow[ApplicationConfig]
+    }
+
+    Persistence.initDb[IO](config.driver, config.url, config.user, config.password).use { implicit xa =>
       implicit val conIOClock = Clock.create[ConnectionIO]
 
-      val config = ConfigSource.default.loadOrThrow[ApplicationConfig]
-
-      val connFactory = new ActiveMQConnectionFactory(config.brokerUrl)
+      val connFactory = if(config.brokerType == "local") {
+        new ActiveMQConnectionFactory(config.brokerUrl)
+      } else {
+        AzureConnectionFactory(config.brokerUrl, config.brokerPassword)
+      }
 
       val publish = MqEventPublisher.publish(
         PendingEventStore.getUnsent, PendingEventStore.removeSent
@@ -64,17 +74,6 @@ object Main extends IOApp {
             .retry(3, 500.millis)
         )
         .measure(time => IO(println(s"Send verification had: $time ns")).liftReader)
-
-
-      def foo[E, A](ma: EitherT[ConnectionIO, E, A]) = EitherT(
-        xa.trans.apply(ma.leftSemiflatMap(in => doobie.hi.HC.rollback.as(in)).value)
-      )
-
-      val testRollback = startNewUserRegistrationProcess
-        .andThen(_.transact(xa))
-
-      println(testRollback(UserHandle("test"), PhoneNumber("+41 79 123 45 68")).run(Trace()).value.unsafeRunSync())
-      println(testRollback(UserHandle("test"), PhoneNumber("+41 79 123 45 67")).run(Trace()).value.unsafeRunSync())
 
       for {
         publications <- publishLoop.start

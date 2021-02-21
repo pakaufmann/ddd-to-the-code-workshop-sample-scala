@@ -17,12 +17,12 @@ package object event {
     )
 
     implicit val bookingCompletedMessageSubscription = MqSubscription.create[BookingCompletedMessage](
-      Topic("rental/booking-completed"),
+      Topic("rental/booking-completed/Subscriptions/accounting"),
       decode[BookingCompletedMessage](_).toTry
     )
 
     implicit val userRegistrationCompletedSubscription = MqSubscription.create[UserRegistrationCompletedMessage](
-      Topic("registration/user-registration-completed"),
+      Topic("registration/user-registration-completed/Subscriptions/accounting"),
       decode[UserRegistrationCompletedMessage](_).toTry
     )
   }
